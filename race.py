@@ -38,7 +38,7 @@ def segment_turn(segment):
 
 
 def drive(track):
-    # predefined speed for turns
+    # predefined speed for all turns
     turns = {
         "t1":44,
         "t2":36,
