@@ -1,5 +1,5 @@
 """
-  follow the race loop at predefined speed profile (for espie track)
+  follow the race loop at computed speed (for any track)
 
   usage:
      race.py <track XML file>
@@ -38,40 +38,6 @@ def segment_turn(segment):
 
 
 def drive(track):
-    # predefined speed for all turns
-    turns = {
-        "t1":44,
-        "t2":36,
-        "t3":36,
-        "t4":32,
-        "t5":48,
-        "t6":59,
-        "t7":32,
-        "t8":38,
-        "t9":33.9,
-        "t10":32,
-        "t11":49,
-        "t12":69,
-        "t13":69,
-        "t14":25,
-        "t15":34,
-        "t16":46,
-        "t17":57,
-        "t18":57,
-        "t19":30,
-        "t20":32,
-        "t21":32,
-        "t22-1":38,
-        "t22-2":38
-    }
-    # predefined speed for some straights
-    straights = {
-        "s15":39,
-        "s16":48,
-        "s17":49,
-        "s22":36,
-        "s23-1":80
-    }
     #time.sleep(10) # wait for game start
     soc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     port = 4001
@@ -84,12 +50,11 @@ def drive(track):
     prev_segment = None
     old_segment = None
     predicted_segment = old_segment
-    min_speed = 25
-    max_speed = 92
+    min_speed = 20
+    max_speed = 99
     target_speed = max_speed  
     sum_e = 0
     last_speed = 0
-    t20 = 1
     start = 1
     while True:
         data = struct.pack('fffiBB', turn, gas, brake, 1, 11, ctr & 0xFF)
@@ -128,15 +93,15 @@ def drive(track):
                 # set speed for predicted segment (far prediction)                    
                 if predicted_segment is not None:
                     if old_segment!=predicted_segment:
-                        if old_segment is not None:
-                            print old_segment.name,"->",predicted_segment.name,round(speed),predicted_segment.radius,predicted_segment.arc
+                        start = 0
+#                         if old_segment is not None:
+#                             print old_segment.name,"->",predicted_segment.name,round(speed),predicted_segment.radius,predicted_segment.arc,predicted_segment.length
                         if predicted_segment.arc is None:
                             target_speed = max_speed
-                            if t20==0 and predicted_segment.name=="start lane": target_speed = 25
-                        if predicted_segment.name in turns: target_speed = turns[predicted_segment.name]
-                        if predicted_segment.name=="pit exit": start = 0
-                        if predicted_segment.name=="t2": t20 = 0
-                        if predicted_segment.name=="t20": t20 = 1
+                            if predicted_segment.length<70:
+                                target_speed = max_speed * 0.6
+                        else:
+                            target_speed = min_speed + predicted_segment.radius / 8
                         old_segment = predicted_segment
                     else:
                         target_speed = target_speed  
@@ -146,8 +111,8 @@ def drive(track):
                 # set speed for actual segment
                 if old_segment is not None and old_segment==segment and segment.radius is None:
                     target_speed = max_speed
-                if segment.name in straights: target_speed = straights[segment.name]
-                if segment.name=="start lane" and t20==0: target_speed = 25
+                    if segment.length<70:
+                        target_speed = max_speed * 0.6
                 if start==1: target_speed = 79
 
                 # PID speed regulation
@@ -180,7 +145,8 @@ def drive(track):
                     turn += max(-max_dist_turn_deg, dead_band - signed_dist)
 
             if prev_segment != segment:
-                print segment.name,target_speed,round(speed),round(100*gas)/100,round(100*brake)/100
+#                 print segment.name,target_speed,round(speed),round(100*gas)/100,round(100*brake)/100
+                print segment.name,round(target_speed),round(speed),round(100*gas)/100,segment.radius,segment.arc,segment.length
                 #print segment, rel_pose
                 prev_segment = segment
 
