@@ -7,9 +7,12 @@
 
 # strategy:
 # - set speed high for straight segments and low for sharp turned segments
-# - set proper speed for segments with high radius
 # - control speed by gas and brake (PID regulator)
 # - cut turns by predicted position
+
+# changelog:
+# v0.02 - 2016-12-16 - improved speed in turns but unsafe on exits
+# v0.01 - 2016-12-15 - basic universal racing version (for any track)
 
 import math
 import socket
@@ -38,6 +41,7 @@ def segment_turn(segment):
 
 
 def drive(track):
+    print "race.py v0.02 (2016-12-16)"
     #time.sleep(10) # wait for game start
     soc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     port = 4001
@@ -50,8 +54,8 @@ def drive(track):
     prev_segment = None
     old_segment = None
     predicted_segment = old_segment
-    min_speed = 20
-    max_speed = 99
+    min_speed = 14
+    max_speed = 109
     target_speed = max_speed  
     sum_e = 0
     last_speed = 0
@@ -77,8 +81,7 @@ def drive(track):
             absPosY1 = absPosY + prediction_time * absVelY
             predicted_segment, rel_pose1 = track.nearest_segment((absPosX1, absPosY1, heading))
 
-            #prediction_time = 0.45  # sec
-            prediction_time = 0.38 + speed / 600  # sec
+            prediction_time = 0.28 + speed / 300  # sec
             absPosX += prediction_time * absVelX
             absPosY += prediction_time * absVelY
 
@@ -97,11 +100,17 @@ def drive(track):
 #                         if old_segment is not None:
 #                             print old_segment.name,"->",predicted_segment.name,round(speed),predicted_segment.radius,predicted_segment.arc,predicted_segment.length
                         if predicted_segment.arc is None:
+                            # straight
                             target_speed = max_speed
                             if predicted_segment.length<70:
-                                target_speed = max_speed * 0.6
+                                target_speed = max_speed * 0.55
                         else:
-                            target_speed = min_speed + predicted_segment.radius / 8
+                            # turn
+                            target_speed = min_speed + predicted_segment.radius / 3
+                            if target_speed>50:
+                                target_speed = 50
+                            if predicted_segment.radius>210:
+                                target_speed = min_speed + predicted_segment.radius / 5
                         old_segment = predicted_segment
                     else:
                         target_speed = target_speed  
@@ -110,9 +119,10 @@ def drive(track):
 
                 # set speed for actual segment
                 if old_segment is not None and old_segment==segment and segment.radius is None:
+                    # straight
                     target_speed = max_speed
                     if segment.length<70:
-                        target_speed = max_speed * 0.6
+                        target_speed = max_speed * 0.55
                 if start==1: target_speed = 79
 
                 # PID speed regulation
@@ -127,14 +137,14 @@ def drive(track):
                 gas = P * e + I * sum_e - D * (speed - last_speed)
                 last_speed = speed
                 brake = 0.0
-                #if gas>1.0: gas = 1
+                if gas>1.0: gas = 1
                 if gas<0.2 and speed>20:
                     gas = 0.01
                     if speed>(target_speed + 2):
                         brake = 0.16
 
                 dead_band = 0.1
-                max_dist_turn_deg = 10
+                max_dist_turn_deg = 19
 
                 if signed_dist < -dead_band:
                     # turn left
@@ -145,9 +155,7 @@ def drive(track):
                     turn += max(-max_dist_turn_deg, dead_band - signed_dist)
 
             if prev_segment != segment:
-#                 print segment.name,target_speed,round(speed),round(100*gas)/100,round(100*brake)/100
                 print segment.name,round(target_speed),round(speed),round(100*gas)/100,segment.radius,segment.arc,segment.length
-                #print segment, rel_pose
                 prev_segment = segment
 
         except socket.error:
