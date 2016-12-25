@@ -11,6 +11,7 @@
 # - cut turns by predicted position
 
 # changelog:
+# v0.07 - 2016-12-25 - parameters tuning
 # v0.06 - 2016-12-24 - computing speed in turns from centrifugal force
 # v0.05 - 2016-12-22 - testing parameters for Espie track
 # v0.04 - 2016-12-19 - safe parameters for any track
@@ -43,9 +44,74 @@ def segment_turn(segment):
         angle = -angle
     return math.degrees(angle)
 
+def tune_min_speed(min_speed,filename):
+    if "espie" in filename:
+        min_speed = 10
+    if "karwada" in filename:
+        min_speed = 4
+    if "migrants" in filename:
+        min_speed = 6
+    if "ruudskogen" in filename:
+        min_speed = 12
+    if "aalborg" in filename:
+        min_speed = 5
+    if "corkscrew" in filename:
+        min_speed = 6
+    return min_speed
+
+def tune_target_speed(target_speed,turn_radius,predicted_segment):
+    if "espie" in filename:
+        if "t17" in predicted_segment.name:
+            target_speed =  48
+    if "forza" in filename:
+        if "curve 11" in predicted_segment.name:
+            target_speed =  53
+        if "curve 13" in predicted_segment.name:
+            target_speed =  34
+        if "curve 14" in predicted_segment.name:
+            target_speed =  38
+        if "curve 15" in predicted_segment.name:
+            target_speed =  42
+        if predicted_segment.radius>210:
+            target_speed -=  target_speed / 8
+        if predicted_segment.radius>1000:
+            target_speed = 48 + turn_radius / 160
+    if "migrants" in filename:
+        if "S2"==predicted_segment.name:
+            target_speed =  38
+        if "S9" in predicted_segment.name:
+            target_speed =  46
+        if "S22"==predicted_segment.name:
+            target_speed =  58
+    if "ruudskogen" in filename:
+        if "curve 1." in predicted_segment.name:
+            target_speed =  36
+        if "curve 37" in predicted_segment.name:
+            target_speed =  30
+        if "curve 5." in predicted_segment.name:
+            target_speed =  24
+        if "curve 18" in predicted_segment.name:
+            target_speed =  44
+        if "curve 19." in predicted_segment.name:
+            target_speed =  38
+    if "aalborg" in filename:
+        if "40"==predicted_segment.name:
+            target_speed =  28
+        if "160"==predicted_segment.name:
+            target_speed =  29
+        if "190"==predicted_segment.name:
+            target_speed =  54
+        if "200"==predicted_segment.name:
+            target_speed =  52
+    if "corkscrew" in filename:
+        if "s10." in predicted_segment.name:
+            target_speed =  46
+        if "s11" in predicted_segment.name:
+            target_speed =  46
+    return target_speed
 
 def drive(track):
-    print "race.py v0.06 (2016-12-24)",filename
+    print "race.py v0.07 (2016-12-25)",filename
     #time.sleep(10) # wait for game start
     soc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     port = 4001
@@ -56,19 +122,14 @@ def drive(track):
     brake = 0.0
     turn = 0.0
     # initial parameters
-    P = 0.06
-    I = 0.003
+    P = 0.09
+    I = 0.004
     D = 3.0
     min_speed = 8
     max_speed = 66
     turn_radius = 100
     max_centrifugal_acceleration = 9
-    if "espie" in filename:
-        P = 0.08
-        I = 0.003
-        D = 3.0
-        min_speed = 7
-        max_speed = 66
+    min_speed = tune_min_speed(min_speed,filename)
     prev_segment = None
     old_segment = None
     predicted_segment = old_segment
@@ -97,12 +158,12 @@ def drive(track):
 
             rpm,elevel = struct.unpack_from('ff', status, 16)
             
-            prediction_time = speed/18  # sec (was 18)
+            prediction_time = speed/20  # sec (was 18)
             absPosX1 = absPosX + prediction_time * absVelX
             absPosY1 = absPosY + prediction_time * absVelY
             predicted_segment, rel_pose1 = track.nearest_segment((absPosX1, absPosY1, heading))
 
-            prediction_time = 0.2 + speed / 300  # sec (was 0.28)
+            prediction_time = 0.22 + speed / 300  # sec (was 0.28)
             absPosX += prediction_time * absVelX
             absPosY += prediction_time * absVelY
 
@@ -123,24 +184,13 @@ def drive(track):
                         if predicted_segment.arc is None:
                             # straight
                             target_speed = max_speed
-                            if predicted_segment.length<70:
-                                target_speed = max_speed * 0.95
+                            target_speed = tune_target_speed(target_speed,2000,predicted_segment)
+                            turn_speed = target_speed
                         else:
                             # turn
                             turn_radius = max(predicted_segment.radius, predicted_segment.end_radius)
                             target_speed = min_speed + math.sqrt(turn_radius * max_centrifugal_acceleration)
-                            if "curve 11" in predicted_segment.name:
-                                target_speed =  53
-                            if "curve 13" in predicted_segment.name:
-                                target_speed =  32
-                            if "curve 14" in predicted_segment.name:
-                                target_speed =  36
-                            if "curve 15" in predicted_segment.name:
-                                target_speed =  40
-                            if predicted_segment.radius>210:
-                                target_speed -=  target_speed / 8
-                            if predicted_segment.radius>1000:
-                                target_speed = 48 + turn_radius / 160
+                            target_speed = tune_target_speed(target_speed,turn_radius,predicted_segment)
                             turn_speed = target_speed
                         old_segment = predicted_segment
                         mem_speed[predicted_segment.name] = target_speed
@@ -178,7 +228,7 @@ def drive(track):
                     if speed>(target_speed + 2):
                         #brake = 0.19
                         #brake = 0.1 + speed/300
-                        brake = 0.1 + (speed-target_speed)/100
+                        brake = 0.14 + (speed-target_speed)/100
                 if rpm>14900:
                     gas = 0.01
 
@@ -201,7 +251,8 @@ def drive(track):
                 if length is not None: length = round(length)
                 if end_radius is not None: end_radius = round(end_radius)
                 #print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:20}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,filename)
-                print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:5}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,end_radius)
+                #print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:5}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,end_radius)
+                print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:5}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,"")
                 prev_segment = segment
 
         except socket.error:
