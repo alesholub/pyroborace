@@ -11,6 +11,8 @@
 # - cut turns by predicted position
 
 # changelog:
+# v0.?? - 201?-??-?? - opponents avoiding
+# v0.?? - 201?-??-?? - ride the ideal track
 # v0.07 - 2016-12-25 - parameters tuning
 # v0.06 - 2016-12-24 - computing speed in turns from centrifugal force
 # v0.05 - 2016-12-22 - testing parameters for Espie track
@@ -111,7 +113,7 @@ def tune_target_speed(target_speed,turn_radius,predicted_segment):
     return target_speed
 
 def drive(track):
-    print "race.py v0.07 (2016-12-25)",filename
+    print "race.py v0.08 (2016-12-26)",filename
     #time.sleep(10) # wait for game start
     soc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     port = 4001
@@ -152,18 +154,26 @@ def drive(track):
             absPosX, absPosY, absPosZ = struct.unpack_from('fff', status, 44)
             angX, angY, angZ = struct.unpack_from('fff', status, 56)
             heading = angZ  # in radiands +/- PI
+            absPosX0 = absPosX
+            absPosY0 = absPosY
 
             absVelX, absVelY = struct.unpack_from('ff', status, 80)
             speed = math.sqrt(absVelX*absVelX + absVelY*absVelY)
 
             rpm,elevel = struct.unpack_from('ff', status, 16)
+
+            v2xn = struct.unpack_from('B', status, 128)[0]
+            v201XPos, v202XPos, v203XPos = struct.unpack_from('fff', status, 168)
+            v201YPos, v202YPos, v203YPos = struct.unpack_from('fff', status, 324)
+            v201Speed, v202Speed, v203Speed = struct.unpack_from('fff', status, 480)
+            v201Yaw, v202Yaw, v203Yaw = struct.unpack_from('fff', status, 636)
             
             prediction_time = speed/20  # sec (was 18)
             absPosX1 = absPosX + prediction_time * absVelX
             absPosY1 = absPosY + prediction_time * absVelY
             predicted_segment, rel_pose1 = track.nearest_segment((absPosX1, absPosY1, heading))
 
-            prediction_time = 0.22 + speed / 300  # sec (was 0.28)
+            prediction_time = 0.24 + speed / 300  # sec (was 0.28)
             absPosX += prediction_time * absVelX
             absPosY += prediction_time * absVelY
 
@@ -251,8 +261,9 @@ def drive(track):
                 if length is not None: length = round(length)
                 if end_radius is not None: end_radius = round(end_radius)
                 #print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:20}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,filename)
-                #print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:5}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,end_radius)
-                print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:5}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,"")
+                print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:5} {9:5} {10:5} {11:5}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,"","","","")
+                #print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:5} {9:5} {10:5} {11:5}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,round(v201XPos),round(v201YPos),round(absPosX0),round(absPosY0))
+                #print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:5} {9:5} {10:5} {11:5}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,round(v201XPos),round(v201YPos),round(math.degrees(v201Yaw)),round(math.degrees(v203Yaw)))
                 prev_segment = segment
 
         except socket.error:

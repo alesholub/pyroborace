@@ -2,15 +2,17 @@
   follow the race loop
 
   usage:
-     demo.py <track XML file>
+     demo.py <track XML file> [<input log file>]
 """
 
 import math
-import socket
+import os
 import struct
 import sys
 
+from iolog import IOLog, Timeout, IOFromFile
 from track import Track
+
 
 def segment_turn(segment):
     """Return turn angle in degrees (expected car structure input)"""
@@ -30,11 +32,10 @@ def segment_turn(segment):
     return math.degrees(angle)
 
 
-def drive(track):
-    soc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+def drive(io, track):
     port = 4001
-    soc.bind(('', port))
-    soc.settimeout(1.0)
+    io.bind(('', port))
+    io.settimeout(1.0)
     ctr = 0
     gas = 0.0
     brake = 0.0
@@ -42,9 +43,9 @@ def drive(track):
     prev_segment = None
     while True:
         data = struct.pack('fffiBB', turn, gas, brake, 1, 11, ctr & 0xFF)
-        soc.sendto(data, ('127.0.0.1', 3001))
+        io.sendto(data, ('127.0.0.1', 3001))
         try:
-            status = soc.recv(1024)
+            status = io.recv(1024)
             assert len(status) == 794, len(status)
             sim_status = struct.unpack_from('B', status, 792)[0]
             if sim_status == 5: # simulation stopped
@@ -79,7 +80,7 @@ def drive(track):
                 print segment, rel_pose
                 prev_segment = segment
 
-        except socket.timeout:
+        except Timeout:
             pass
         ctr += 1
 
@@ -89,6 +90,13 @@ if __name__ == "__main__":
         sys.exit(2)
     filename = sys.argv[1]
     track = Track.from_xml_file(filename)
-    drive(track)
+
+    if len(sys.argv) == 2:
+        prefix = os.path.splitext(os.path.basename(filename))[0]
+        io = IOLog(prefix=prefix)
+    else:
+        io = IOFromFile(filename=sys.argv[2])
+
+    drive(io, track)
 
 # vim: expandtab sw=4 ts=4
