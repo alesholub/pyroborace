@@ -5,6 +5,8 @@
      race.py <track XML file>
 """
 
+ver = "race.py v0.08 (2016-12-27)"
+
 # strategy:
 # - set speed high for straight segments and low for sharp turned segments
 # - control speed by gas and brake (PID regulator)
@@ -12,7 +14,8 @@
 
 # changelog:
 # v0.?? - 201?-??-?? - opponents avoiding
-# v0.?? - 201?-??-?? - ride the ideal track
+# v0.?? - 201?-??-?? - ride the ideal path
+# v0.08 - 2016-12-27 - using of updated modules from robotika/pyroborace
 # v0.07 - 2016-12-25 - parameters tuning
 # v0.06 - 2016-12-24 - computing speed in turns from centrifugal force
 # v0.05 - 2016-12-22 - testing parameters for Espie track
@@ -22,103 +25,21 @@
 # v0.01 - 2016-12-15 - basic universal racing version (for any track)
 
 import math
+import os
 import socket
 import struct
 import sys
 import time
 
+from iolog import IOLog, Timeout, IOFromFile
 from track import Track
-
-def segment_turn(segment):
-    """Return turn angle in degrees (expected car structure input)"""
-    # for Robocar with following definition
-    # <section name="Front Axle">
-    #   <attnum name="xpos" min="0.1" max="5" val="1.104"/>
-    # <section name="Rear Axle">
-    #   <attnum name="xpos" min="-5" max="-0.1" val="-1.469"/>
-    axis_dist = 1.104 + 1.469
-
-    if segment.arc is None:
-        return 0.0
-    angle = math.atan2(axis_dist, segment.radius)
-    if segment.arc < 0:
-        # right left
-        angle = -angle
-    return math.degrees(angle)
-
-def tune_min_speed(min_speed,filename):
-    if "espie" in filename:
-        min_speed = 10
-    if "karwada" in filename:
-        min_speed = 4
-    if "migrants" in filename:
-        min_speed = 6
-    if "ruudskogen" in filename:
-        min_speed = 12
-    if "aalborg" in filename:
-        min_speed = 5
-    if "corkscrew" in filename:
-        min_speed = 6
-    return min_speed
-
-def tune_target_speed(target_speed,turn_radius,predicted_segment):
-    if "espie" in filename:
-        if "t17" in predicted_segment.name:
-            target_speed =  48
-    if "forza" in filename:
-        if "curve 11" in predicted_segment.name:
-            target_speed =  53
-        if "curve 13" in predicted_segment.name:
-            target_speed =  34
-        if "curve 14" in predicted_segment.name:
-            target_speed =  38
-        if "curve 15" in predicted_segment.name:
-            target_speed =  42
-        if predicted_segment.radius>210:
-            target_speed -=  target_speed / 8
-        if predicted_segment.radius>1000:
-            target_speed = 48 + turn_radius / 160
-    if "migrants" in filename:
-        if "S2"==predicted_segment.name:
-            target_speed =  38
-        if "S9" in predicted_segment.name:
-            target_speed =  46
-        if "S22"==predicted_segment.name:
-            target_speed =  58
-    if "ruudskogen" in filename:
-        if "curve 1." in predicted_segment.name:
-            target_speed =  36
-        if "curve 37" in predicted_segment.name:
-            target_speed =  30
-        if "curve 5." in predicted_segment.name:
-            target_speed =  24
-        if "curve 18" in predicted_segment.name:
-            target_speed =  44
-        if "curve 19." in predicted_segment.name:
-            target_speed =  38
-    if "aalborg" in filename:
-        if "40"==predicted_segment.name:
-            target_speed =  28
-        if "160"==predicted_segment.name:
-            target_speed =  29
-        if "190"==predicted_segment.name:
-            target_speed =  54
-        if "200"==predicted_segment.name:
-            target_speed =  52
-    if "corkscrew" in filename:
-        if "s10." in predicted_segment.name:
-            target_speed =  46
-        if "s11" in predicted_segment.name:
-            target_speed =  46
-    return target_speed
+from raceutils import segment_turn, tune_min_speed, tune_target_speed
 
 def drive(track):
-    print "race.py v0.08 (2016-12-26)",filename
-    #time.sleep(10) # wait for game start
-    soc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    print ver,filename
     port = 4001
-    soc.bind(('', port))
-    soc.settimeout(1.0)
+    io.bind(('', port))
+    io.settimeout(1.0)
     ctr = 0
     gas = 0.0
     brake = 0.0
@@ -144,9 +65,9 @@ def drive(track):
     start = 1
     while True:
         data = struct.pack('fffiBB', turn, gas, brake, 1, 11, ctr & 0xFF)
-        soc.sendto(data, ('127.0.0.1', 3001))
+        io.sendto(data, ('127.0.0.1', 3001))
         try:
-            status = soc.recv(1024)
+            status = io.recv(1024)
             assert len(status) == 794, len(status)
             sim_status = struct.unpack_from('B', status, 792)[0]
             if sim_status == 5: # simulation stopped
@@ -194,13 +115,13 @@ def drive(track):
                         if predicted_segment.arc is None:
                             # straight
                             target_speed = max_speed
-                            target_speed = tune_target_speed(target_speed,2000,predicted_segment)
+                            target_speed = tune_target_speed(target_speed,2000,predicted_segment,filename)
                             turn_speed = target_speed
                         else:
                             # turn
                             turn_radius = max(predicted_segment.radius, predicted_segment.end_radius)
                             target_speed = min_speed + math.sqrt(turn_radius * max_centrifugal_acceleration)
-                            target_speed = tune_target_speed(target_speed,turn_radius,predicted_segment)
+                            target_speed = tune_target_speed(target_speed,turn_radius,predicted_segment,filename)
                             turn_speed = target_speed
                         old_segment = predicted_segment
                         mem_speed[predicted_segment.name] = target_speed
@@ -267,7 +188,7 @@ def drive(track):
                 prev_segment = segment
 
         except socket.error:
-            print "socket timeout",ctr
+            print "timeout",ctr
             time.sleep(1)
             #pass
         ctr += 1
@@ -278,7 +199,13 @@ if __name__ == "__main__":
         sys.exit(2)
     filename = sys.argv[1]
     track = Track.from_xml_file(filename)
-    #print_track(track)
+
+    if len(sys.argv) == 2:
+        prefix = os.path.splitext(os.path.basename(filename))[0]
+        io = IOLog(prefix=prefix)
+    else:
+        io = IOFromFile(filename=sys.argv[2])
+
     drive(track)
 
 # vim: expandtab sw=4 ts=4
