@@ -5,7 +5,7 @@
      race.py <track XML file>
 """
 
-ver = "race.py v0.08 (2016-12-27)"
+ver = "race.py v0.09 (2017-01-28)"
 
 # strategy:
 # - set speed high for straight segments and low for sharp turned segments
@@ -15,6 +15,7 @@ ver = "race.py v0.08 (2016-12-27)"
 # changelog:
 # v0.?? - 201?-??-?? - opponents avoiding
 # v0.?? - 201?-??-?? - ride the ideal path
+# v0.09 - 2017-01-28 - support for Python 3
 # v0.08 - 2016-12-27 - using of updated modules from robotika/pyroborace
 # v0.07 - 2016-12-25 - parameters tuning
 # v0.06 - 2016-12-24 - computing speed in turns from centrifugal force
@@ -36,7 +37,7 @@ from track import Track
 from raceutils import segment_turn, tune_min_speed, tune_target_speed
 
 def drive(track):
-    print ver,filename
+    print (ver,filename)
     port = 4001
     io.bind(('', port))
     io.settimeout(1.0)
@@ -119,7 +120,8 @@ def drive(track):
                             turn_speed = target_speed
                         else:
                             # turn
-                            turn_radius = max(predicted_segment.radius, predicted_segment.end_radius)
+                            #turn_radius = max(predicted_segment.radius, predicted_segment.end_radius)
+                            turn_radius = predicted_segment.radius
                             target_speed = min_speed + math.sqrt(turn_radius * max_centrifugal_acceleration)
                             target_speed = tune_target_speed(target_speed,turn_radius,predicted_segment,filename)
                             turn_speed = target_speed
@@ -181,21 +183,18 @@ def drive(track):
                 if arc is not None: arc = round(arc)
                 if length is not None: length = round(length)
                 if end_radius is not None: end_radius = round(end_radius)
-                #print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:20}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,filename)
-                print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:5} {9:5} {10:5} {11:5}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,"","","","")
-                #print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:5} {9:5} {10:5} {11:5}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,round(v201XPos),round(v201YPos),round(absPosX0),round(absPosY0))
-                #print '{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:5} {9:5} {10:5} {11:5}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,round(v201XPos),round(v201YPos),round(math.degrees(v201Yaw)),round(math.degrees(v203Yaw)))
+                #print ('{0:10} {1:4} {2:4} {3:4} {4:7} {5:5} {6:5} {7:5} {8:5} {9:5} {10:5} {11:5}'.format(segment.name[-10:],round(target_speed),round(speed),round(100*gas)/100,round(rpm),radius,arc,length,"","","",""))
                 prev_segment = segment
 
         except socket.error:
-            print "timeout",ctr
+            print ("timeout",ctr)
             time.sleep(1)
             #pass
         ctr += 1
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print __doc__
+        print (__doc__)
         sys.exit(2)
     filename = sys.argv[1]
     track = Track.from_xml_file(filename)
