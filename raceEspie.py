@@ -129,7 +129,7 @@ def drive(track):
                 if predicted_segment is not None:
                     if old_segment!=predicted_segment:
                         if old_segment is not None:
-                            print old_segment.name,"->",predicted_segment.name,round(speed),predicted_segment.radius,predicted_segment.arc
+                            print(old_segment.name,"->",predicted_segment.name,round(speed),predicted_segment.radius,predicted_segment.arc)
                         if predicted_segment.arc is None:
                             target_speed = max_speed
                             if t20==0 and predicted_segment.name=="start lane": target_speed = 25
@@ -180,19 +180,19 @@ def drive(track):
                     turn += max(-max_dist_turn_deg, dead_band - signed_dist)
 
             if prev_segment != segment:
-                print segment.name,target_speed,round(speed),round(100*gas)/100,round(100*brake)/100
+                print(segment.name,target_speed,round(speed),round(100*gas)/100,round(100*brake)/100)
                 #print segment, rel_pose
                 prev_segment = segment
 
         except socket.error:
-            print "socket timeout",ctr
+            print("socket timeout",ctr)
             time.sleep(1)
             #pass
         ctr += 1
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print __doc__
+        print(__doc__)
         sys.exit(2)
     filename = sys.argv[1]
     track = Track.from_xml_file(filename)
